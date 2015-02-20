@@ -1,0 +1,4 @@
+*.pem
+book/
+slides/
+.DS_Store

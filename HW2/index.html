@@ -1,0 +1,307 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+<style>
+h1,
+h2,
+h3,
+h4,
+h5,
+h6,
+p,
+blockquote {
+    margin: 0;
+    padding: 0;
+}
+body {
+    font-family: "Helvetica Neue", Helvetica, "Hiragino Sans GB", Arial, sans-serif;
+    font-size: 13px;
+    line-height: 18px;
+    color: #737373;
+    background-color: white;
+    margin: 10px 13px 10px 13px;
+}
+table {
+	margin: 10px 0 15px 0;
+	border-collapse: collapse;
+}
+td,th {	
+	border: 1px solid #ddd;
+	padding: 3px 10px;
+}
+th {
+	padding: 5px 10px;	
+}
+
+a {
+    color: #0069d6;
+}
+a:hover {
+    color: #0050a3;
+    text-decoration: none;
+}
+a img {
+    border: none;
+}
+p {
+    margin-bottom: 9px;
+}
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+    color: #404040;
+    line-height: 36px;
+}
+h1 {
+    margin-bottom: 18px;
+    font-size: 30px;
+}
+h2 {
+    font-size: 24px;
+}
+h3 {
+    font-size: 18px;
+}
+h4 {
+    font-size: 16px;
+}
+h5 {
+    font-size: 14px;
+}
+h6 {
+    font-size: 13px;
+}
+hr {
+    margin: 0 0 19px;
+    border: 0;
+    border-bottom: 1px solid #ccc;
+}
+blockquote {
+    padding: 13px 13px 21px 15px;
+    margin-bottom: 18px;
+    font-family:georgia,serif;
+    font-style: italic;
+}
+blockquote:before {
+    content:"\201C";
+    font-size:40px;
+    margin-left:-10px;
+    font-family:georgia,serif;
+    color:#eee;
+}
+blockquote p {
+    font-size: 14px;
+    font-weight: 300;
+    line-height: 18px;
+    margin-bottom: 0;
+    font-style: italic;
+}
+code, pre {
+    font-family: Monaco, Andale Mono, Courier New, monospace;
+}
+code {
+    background-color: #fee9cc;
+    color: rgba(0, 0, 0, 0.75);
+    padding: 1px 3px;
+    font-size: 12px;
+    -webkit-border-radius: 3px;
+    -moz-border-radius: 3px;
+    border-radius: 3px;
+}
+pre {
+    display: block;
+    padding: 14px;
+    margin: 0 0 18px;
+    line-height: 16px;
+    font-size: 11px;
+    border: 1px solid #d9d9d9;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+}
+pre code {
+    background-color: #fff;
+    color:#737373;
+    font-size: 11px;
+    padding: 0;
+}
+sup {
+    font-size: 0.83em;
+    vertical-align: super;
+    line-height: 0;
+}
+* {
+	-webkit-print-color-adjust: exact;
+}
+@media screen and (min-width: 914px) {
+    body {
+        width: 854px;
+        margin:10px auto;
+    }
+}
+@media print {
+	body,code,pre code,h1,h2,h3,h4,h5,h6 {
+		color: black;
+	}
+	table, pre {
+		page-break-inside: avoid;
+	}
+}
+</style>
+<title>CS615-HW2 : Software packaging</title>
+<script type="text/x-mathjax-config">MathJax.Hub.Config({tex2jax:{inlineMath:[['$$$','$$$']]}});</script><script src="http://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+</head>
+<body>
+<h1>CS615-HW2 : Software packaging</h1>
+
+<h2>lin liu 10397798</h2>
+
+<h3>Set the environment</h3>
+
+<ul>
+<li>use root privilege to install some tools</li>
+</ul>
+
+
+<pre><code># sudo yum install @development-tools
+# sudo yum install fedora-packager
+# sudo yum install python-devel
+</code></pre>
+
+<ul>
+<li>create new user</li>
+</ul>
+
+
+<pre><code># sudo /usr/sbin/useradd makerpm
+# sudo usermod -a -G mock makerpm
+# sudo passwd makerpm
+</code></pre>
+
+<ul>
+<li>login in and build the directory tree</li>
+</ul>
+
+
+<pre><code># su - makerpm
+$ rpmdev-setuptree
+</code></pre>
+
+<h3>Build a package</h3>
+
+<ul>
+<li>get the source from the <a href="https://github.com/aws/aws-cli">github</a> and put it in the ~/rpmbuild/SOURCE directory</li>
+</ul>
+
+
+<pre><code>curl "https://github.com/aws/aws-cli/archive/1.7.12.tar.gz" -o "aws-cli-1.7.12.tar.gz"
+</code></pre>
+
+<ul>
+<li>edit the .spec file in ~/rpmbuild/SPEC,I have reference the http://download.opensuse.org/update/13.2/src/aws-cli-1.7.1-2.8.1.src.rpm</li>
+</ul>
+
+
+<pre><code>Name:           aws-cli
+Version:        1.7.12
+Release:        1%{?dist}
+Summary:        Amazon Web Services Command Line Interface
+License:        Apache-2.0
+Group:          Applications/System
+Url:            https://github.com/aws/aws-cli
+Source0:        %{name}-%{version}.tar.gz
+Requires:       python
+Requires:       python-pip
+BuildRequires:  python
+BuildRequires:  python-devel
+BuildRequires:  python-setuptools
+BuildRoot:      %{_tmppath}/%{name}-%{version}-build
+BuildArch:      noarch
+
+%description
+The AWS Command Line Interface (CLI) is a unified tool to manage your AWS services. With just one tool to download and configure, you can control multiple AWS services from the command line and automate
+them through scripts.
+
+%prep
+%setup -q
+
+%build
+python setup.py build
+
+%install
+python setup.py install --prefix=%{_prefix} --root=%{buildroot} --install-scripts=%{_bindir}
+# No DOS crap
+rm %{buildroot}/%{_bindir}/aws.cmd
+chmod a+x %{buildroot}/%{python_sitelib}/awscli/paramfile.py
+
+%post
+pip install botocore
+pip install rsa
+pip install bcdoc
+pip install colorama
+pip install docutils
+
+%files
+%defattr(-,root,root,-)
+%doc CHANGELOG.rst LICENSE.txt README.rst
+%dir %{python_sitelib}/awscli
+%dir %{python_sitelib}/awscli-%{version}-py%{python_version}.egg-info
+%{_bindir}/*
+%{python_sitelib}/awscli/*
+%{python_sitelib}/*egg-info/*
+</code></pre>
+
+<ul>
+<li>Use rpmbuild with options to test each phase in spec file.</li>
+</ul>
+
+
+<pre><code>rpmbuild -bp
+Execute %prep.
+rpmbuild -bc
+Execute %prep, %build.
+rpmbuild -bi
+Execute %prep, %build, %install, %check.
+rpmbuild -ba
+Execute %prep, %build, %install, %check, package, perform all the stages.
+Test with rpmlint
+Check minor errors in spec file.
+</code></pre>
+
+<h3>Test</h3>
+
+<ul>
+<li>create a new fedora instance and copy the rpm package to the new instance</li>
+</ul>
+
+
+<pre><code># sudo yum localinstall awscli-1.7.12-1.0.noarch.rpm 
+</code></pre>
+
+<p><img src="http://i.imgur.com/U80UFDk.png" alt="Imgur" /></p>
+
+<ul>
+<li>test the result</li>
+</ul>
+
+
+<pre><code>aws help
+aws --version
+</code></pre>
+
+<p><img src="http://i.imgur.com/8r3NfUH.png" alt="Imgur" /></p>
+
+<h3>Reference</h3>
+
+<ul>
+<li><a href="https://fedoraproject.org/wiki/How_to_create_an_RPM_package">How to create an RPM package</a></li>
+<li><a href="https://fedoraproject.org/wiki/How_to_create_a_GNU_Hello_RPM_package">How to create a GNU Hello RPM package</a></li>
+<li><a href="http://download.opensuse.org/update/13.2/src/aws-cli-1.7.1-2.8.1.src.rpm">src.rpm</a></li>
+</ul>
+
+</body>
+</html>

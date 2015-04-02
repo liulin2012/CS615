@@ -2,3 +2,4 @@
 book/
 slides/
 .DS_Store
+*.out

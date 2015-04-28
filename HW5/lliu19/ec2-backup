@@ -1,0 +1,342 @@
+#!/bin/sh
+
+USER_NAME="root"
+IMAGE_ID="ami-33faef5a"
+DEVICE_FILE="/dev/sdf"
+DIRECTORY="/mnt"
+
+#AWS_CONFIG_FILE=""
+#EC2_CERT=""
+#EC2_HOME=""
+#EC2_PRIVATE_KEY=""
+#
+#EC2_BACKUP_FLAGS_AWS="--key-name ec2-backup1428582182-keypair"
+#EC2_BACKUP_FLAGS_SSH="~/.ssh/id_rsa-ec2-backup1428582182-keypair"
+#EC2_BACKUP_VERBOSE="1"
+
+if [ -n "${EC2_BACKUP_FLAGS_SSH}" ]; then
+    EC2_BACKUP_FLAGS_SSH="`echo ${EC2_BACKUP_FLAGS_SSH} | sed -r "s#~#$HOME#"`"
+fi
+
+#TODO
+#KEYPAIR="ec2-backup1428582182-keypair"
+#ID_RSA="${HOME}/.ssh/id_rsa-${KEYPAIR}"
+#REGION=""
+
+usage() {
+    [ -n "$1" ] && echo "error: "$1
+    echo "Usage: ec2-backup [-h] [-m method] [-v volume-id] dir"
+    echo "ec2-backup accepts the following command-line flags:"
+    echo "-h            Print a usage statement and exit."
+    echo "-m method     Use the given method to perform the backup.  Valid methods are 'dd' and 'rsync'; default is 'dd'."
+    echo "-v volume-id  Use the given volume instead of creating a new one."
+}
+
+run_instance() {
+    ### run a new instance
+    res="`aws ec2 run-instances --image-id ${IMAGE_ID} --output text ${EC2_BACKUP_FLAGS_AWS} 2>/dev/null`"
+    [ $? -ne 0 ] && return $?
+    inst_id="`echo "$res" | awk '/^INSTANCES/ {print $8}' | head -n 1`"
+    addr=""
+    zone=""
+    cnt=0
+
+    ### waiting until the instance is running
+    while :
+    do
+        [ -n "${EC2_BACKUP_VERBOSE}" ] && echo "creating instance..." >&2
+        sleep 2
+        res="`aws ec2 describe-instances --output text 2>/dev/null`"
+        [ $? -ne 0 ] && return $?
+        awk_res="`echo "$res" | awk -v inst_id="${inst_id}" '/^INSTANCES/ {id=$8} /^ASSOCIATION/ {A[id, "addr"]=$3} /^PLACEMENT/ {A[id, "zone"]=$2} /^STAT/ {if (NF == 3) A[id, "state"]=$3} END {print A[inst_id, "addr"],A[inst_id, "zone"],A[inst_id, "state"]}'`"
+        addr="`echo "${awk_res}" | awk '{print $1}'`"
+        zone="`echo "${awk_res}" | awk '{print $2}'`"
+        state="`echo "${awk_res}" | awk '{print $3}'`"
+        [ "${state}" = "running" ] && break
+        cnt=$(($cnt+1))
+        [ $cnt -eq 20 ] && return 2;
+    done
+    echo "${inst_id} ${addr} ${zone}"
+}
+
+del_instance() {
+    inst_id=$1
+    v_id=$2
+    [ -z "${inst_id}" ] && return 1
+
+    ### delete the instance
+    aws ec2 terminate-instances --instance-ids ${inst_id} --output text >/dev/null 2>&1
+    [ $? -ne 0 ] && return $?
+
+    ### if volumn is not given, needn't wait to delete volumn
+    [ -z "${v_id}" ] && return 0
+    cnt=0
+    while :
+    do
+        [ -n "${EC2_BACKUP_VERBOSE}" ] && echo "delete instance..." >&2
+        sleep 2
+        res="`aws ec2 describe-instances --output text 2>/dev/null`"
+        [ $? -ne 0 ] && return $?
+        awk_res="`echo "$res" | awk -v inst_id="${inst_id}" '/^INSTANCES/ {id=$8} /^STAT/ {if (NF == 3) A[id, "state"]=$3} END {print A[inst_id, "state"]}'`"
+        state="`echo "${awk_res}" | awk '{print $1}'`"
+        [ "${state}" = "terminated" ] && break
+        cnt=$(($cnt+1))
+        [ $cnt -eq 20 ] && return 2;
+    done
+    aws ec2 delete-volume --volume-id ${v_id} > /dev/null 2>&1
+    [ $? -ne 0 ] && return $?
+}
+
+create_vol() {
+    vol_size=$1
+    zone="$2"
+    [ -z "${vol_size}" -o -z "${zone}" ] && return 1
+
+    ### create volumn
+    res="`aws ec2 create-volume --size ${vol_size} --availability-zone "${zone}" --output text 2>/dev/null`"
+    [ $? -ne 0 ] && return $?
+    vol_id="`echo "$res" | awk '{print $6}' | head -n1`"
+    cnt=0
+
+    ### wait until the volumn is created
+    while :
+    do
+        sleep 2
+        vol_state="`aws ec2 describe-volumes --volume-ids "${vol_id}" --output text 2>/dev/null`"
+        [ $? -ne 0 ] && return $?
+        state="`echo "${vol_state}" | awk '{print $6}' | head -n1`"
+        [ -n "${EC2_BACKUP_VERBOSE}" ] && echo "Creating volumn, state: ${state}..." >&2
+        [ "${state}" != "creating" ] && break
+        cnt=$(($cnt+1))
+        [ $cnt -eq 20 ] && return 2;
+    done
+    echo "${vol_id}"
+}
+
+attach_vol() {
+    vol_id="$1"
+    inst_id="$2"
+    [ -z "${vol_id}" -o -z "${inst_id}" ] && return 1
+
+    ### attach volumn
+    aws ec2 attach-volume --volume-id ${vol_id} --instance-id ${inst_id} --device ${DEVICE_FILE} --output text >/dev/null 2>&1
+    [ $? -ne 0 ] && return 2
+    cnt=0
+
+    ### wait until the volumn is attached
+    while :
+    do
+        sleep 2
+        vol_state="`aws ec2 describe-volumes --volume-ids "${vol_id}" --output text 2>/dev/null`"
+        [ $? -ne 0 ] && return $?
+        state="`echo "${vol_state}" | awk '/^ATTACHMENTS/ {print $6}' | head -n1`"
+        [ -n "${EC2_BACKUP_VERBOSE}" ] && echo "Attaching volumn, state: ${state}..." >&2
+        [ "${state}" = "attached" ] && break
+        cnt=$(($cnt+1))
+        [ $cnt -eq 20 ] && return 2;
+    done
+}
+
+detach_vol() {
+    vol_id=$1
+    [ -z "${vol_id}" ] && return 1
+
+    ### detach volumn
+    aws ec2 detach-volume --volume-id ${vol_id} --output text >/dev/null 2>&1
+    [ $? -ne 0 ] && return 2
+    cnt=0
+
+    ### wait untill the volumn is detached
+    while :
+    do
+        sleep 2
+        vol_state="`aws ec2 describe-volumes --volume-ids "${vol_id}" --output text 2>/dev/null`"
+        [ $? -ne 0 ] && return $?
+        state="`echo "${vol_state}" | awk '{print $6}' | head -n1`"
+        [ -n "${EC2_BACKUP_VERBOSE}" ] && echo "Detaching volumn, state: ${state}..." >&2
+        [ "${state}" = "available" ] && break
+        cnt=$(($cnt+1))
+        [ $cnt -eq 20 ] && return 2;
+    done
+}
+
+#create_keypair() {
+#    [ $? -ne 0 ] && return 1
+#    if [ -z "`aws ec2 describe-key-pairs --output text | grep ${KEYPAIR}`" ]; then
+#        echo $ID_RSA
+#        aws ec2 create-key-pair --key-name $KEYPAIR --query 'KeyMaterial' --output text > $ID_RSA
+#        [ $? -ne 0 ] && return 2
+#        chmod 400 $ID_RSA
+#    fi
+#}
+
+backup_dd() {
+    dir=$1
+    addr=$2
+    dev=$3
+    [ -z "$dir" -o -z "$addr" -o -z "$dev" ] && return 1
+    cnt=0
+    while :
+    do
+        [ -n "${EC2_BACKUP_VERBOSE}" ] && echo "backup using dd ..." >&2
+        sleep 5
+        tar -cPf - "$dir" | ssh -oStrictHostKeyChecking=no ${EC2_BACKUP_FLAGS_SSH} ${USER_NAME}@$addr "dd of=$dev" >/dev/null 2>&1
+        [ $? -eq 0 ] && break
+        cnt=$(($cnt+1))
+        [ $cnt -eq 30 ] && return 2;
+    done
+}
+
+backup_rsync() {
+    dir=$1
+    addr=$2
+    dev=$3
+    [ -z "$dir" -o -z "$addr" -o -z "$dev" ] && return 1
+
+    ### make filesystem and mount
+    cnt=0
+    while :
+    do
+        [ -n "${EC2_BACKUP_VERBOSE}" ] && echo "mkfs and mount on $addr ..." >&2
+        sleep 5
+        ssh -oStrictHostKeyChecking=no ${EC2_BACKUP_FLAGS_SSH} ${USER_NAME}@$addr "yes | mkfs.ext3 $dev && mount $dev $DIRECTORY;" >/dev/null 2>&1
+        [ $? -eq 0 ] && break
+        cnt=$(($cnt+1))
+        [ $cnt -eq 30 ] && return 2;
+    done
+
+    ### start to backup
+    cnt=0
+    while :
+    do
+        [ -n "${EC2_BACKUP_VERBOSE}" ] && echo "rsync..." >&2
+        rsync -azP $dir --delete ${USER_NAME}@$addr:$DIRECTORY -e "ssh ${EC2_BACKUP_FLAGS_SSH}" >/dev/null 2>&1
+        [ $? -eq 0 ] && break
+        cnt=$(($cnt+1))
+        [ $cnt -eq 30 ] && return 3;
+        sleep 5
+    done
+
+    ### umount the disk, so that it can be detached
+    cnt=0
+    while :
+    do
+        [ -n "${EC2_BACKUP_VERBOSE}" ] && echo "umount..." >&2
+        ssh -oStrictHostKeyChecking=no ${EC2_BACKUP_FLAGS_SSH} ${USER_NAME}@$addr "umount $dev" >/dev/null 2>&1
+        [ $? -eq 0 ] && break
+        cnt=$(($cnt+1))
+        [ $cnt -eq 30 ] && return 3;
+        sleep 5
+    done
+}
+
+################# Script start ################
+
+
+################# Step 1: Read parameter ################
+args=`getopt -o hm:v: -n 'wrong parameter' -- "$@"`
+if [ $? -ne 0 ] ; then
+    #echo "Fatal error happens when handle parameters!" >&2
+    exit 1
+fi
+eval set -- "$args"
+
+method=""
+volume_id=""
+dir=""
+
+while true; do
+    case "$1" in
+        -h) usage;exit 0; shift;;
+        -m) method=$2;    shift 2;;
+        -v) volume_id=$2; shift 2;;
+        --) shift; break;;
+         *) echo "Internal error!"; exit 1;;
+    esac
+done
+dir=$1
+if [ -z "$dir" ]; then
+    usage "Directory is required!"
+    exit 1;
+fi
+if [ -n "$method" -a "$method" != "dd" -a "$method" != "rsync" ]; then
+    usage "method can only be dd or rsync!"
+    exit 1;
+fi
+
+#create_keypair
+
+################# Step 2: Run a new instance ################
+res="`run_instance`"
+[ $? -ne 0 ] && exit 2
+inst_id="`echo "$res" | awk '{print $1}'`"
+addr="`echo "$res" | awk '{print $2}'`"
+zone="`echo "$res" | awk '{print $3}'`"
+[ -n "${EC2_BACKUP_VERBOSE}" ] && echo "Instance id: ${inst_id}, addr: $addr, zone: $zone" >&2
+
+################# Step 3: Calculate the file size ################
+vol_size="`du -sk $dir | awk '{$s=$1/1024/1024*2;print int($s)==$s?$s:int(int($s*10/10+1))}'`"
+[ -n "${EC2_BACKUP_VERBOSE}" ] && echo "File size: `du -sk $dir` Volume size: ${vol_size}" >&2
+
+################# Step 4: Get volumn id ################
+# If volumn id is 
+vol_id=""
+if [ -z "$volume_id" ]; then
+    vol_id=`create_vol ${vol_size} ${zone}`
+    if [ $? -ne 0 ]; then
+        del_instance "${inst_id}"
+        exit 3
+    fi
+else
+    vol_id=$volume_id
+fi
+[ -n "${EC2_BACKUP_VERBOSE}" ] && echo "Volume id: ${vol_id}" >&2
+
+################# Step 5: Attach volumn ################
+attach_vol "${vol_id}" "${inst_id}"
+if [ $? -ne 0 ]; then
+    [ -n "${EC2_BACKUP_VERBOSE}" ] && echo "Failed to attach volumn, and now delete instance and volumn..." >&2
+    del_instance "${inst_id}" "${vol_id}"
+    exit 4
+fi
+[ -n "${EC2_BACKUP_VERBOSE}" ] && echo "Volumn attached." >&2
+
+################# Step 6: Backup ################
+if [ "$method" = "rsync" ]; then
+    backup_rsync $dir $addr ${DEVICE_FILE}
+    if [ $? -ne 0 ]; then
+        [ -n "${EC2_BACKUP_VERBOSE}" ] && echo "Failed to backup, and now delete instance and volumn..." >&2
+        del_instance "${inst_id}" "${vol_id}"
+        exit 5
+    fi
+else
+    backup_dd $dir $addr ${DEVICE_FILE}
+    if [ $? -ne 0 ]; then
+        [ -n "${EC2_BACKUP_VERBOSE}" ] && echo "Failed to backup, and now delete instance and volumn..." >&2
+        del_instance "${inst_id}" "${vol_id}"
+        exit 6
+    fi
+fi
+[ -n "${EC2_BACKUP_VERBOSE}" ] && echo "Backup successfully." >&2
+
+################# Step 7: Detach volumn ################
+detach_vol "${vol_id}"
+if [ $? -ne 0 ]; then
+    [ -n "${EC2_BACKUP_VERBOSE}" ] && echo "Failed to detach the volumn, and now delete instance..." >&2
+    del_instance "${inst_id}"
+    exit 7
+fi
+[ -n "${EC2_BACKUP_VERBOSE}" ] && echo "Volumn detached." >&2
+
+################# Step 7: Delete instance ################
+del_instance "${inst_id}"
+if [ $? -ne 0 ]; then
+    [ -n "${EC2_BACKUP_VERBOSE}" ] && echo "Backup successfully, but failed to delete instance."
+    echo "Volumne id: ${vol_id}"
+    exit 7
+fi
+[ -n "${EC2_BACKUP_VERBOSE}" ] && echo "Instance deleted." >&2
+
+[ -n "${EC2_BACKUP_VERBOSE}" ] && echo "Congrats! Backup successfully!"
+
+echo "Volumne id: ${vol_id}"

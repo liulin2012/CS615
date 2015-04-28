@@ -1,0 +1,23 @@
+Homework 5 by Xiakun Lu, Lin Liu, Hanxiong Chen
+
+This ec2-backup tool is implemented strictly by following the manual document. Some other complementary information and some problems occurred during test process will be given in this file. We use shell script to create this tool. This is because shell script is easy to implement automatical operation tools.
+
+1. Difference between dd and rsync modes
+-1 dd command
+   DD tool will write data into a raw disk. That means data should be packed up before being written to a raw disk. That's the reason why we do tar first. If we do not pack up data and write the all the data directly to the raw disk, it is hard to get the data back. 
+-2 rsync command
+   rsync tool will write the data to a disk with file system. We do not need to do tar before backup. This tool will compare the differences and transfer the different part to the back-up disk. There are two modes for rsync -- server mode and ssh mode. Server mode need some configuration before using it. It need to setup a rsync server. The preperation stage is complicated but easy to use and maintain in the future. The other one is ssh mode which need less configuration but much coding task to do each time. In this homework, we use ssh mode.
+
+2. Limit retry times
+   Many issues may affect the tool running properly. Retry time should be set to make sure the program will not run into infinite loop. For example, when to run an instance and launch it, the ssh may not work due to some network issues. If we do not limit the retry time, this program will not stop. The same thing goes with other commands which may lead to infinite loop.
+
+3. Waiting time
+   This script use a SUSE LINUX AMI as default. This image need some time to start-up and need to wait ssh service start. This process will cost about 2 minutesdepends on network situation and service situation. Please be patient.
+
+4. Design model
+   We design this tool by encapsulating different functions into some specific modules. Each function responsibles for only one task. All these functions construct this program. This is good for developing and testing.
+
+5. Output in failed backup
+   There is no notice of failed backup in rsync mode. What you can see are some rsync... and then some failed information then delete instance, finally exit. No "backup failed" notice will be given in the final output. This is because we do rsync by using some local commands. If there are some errors or backup failed, we cannot receive any return value of failure from instance. That's the reason why we don't add any notice of the failed backup here and just exit the program.
+
+

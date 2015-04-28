@@ -22,6 +22,7 @@ This is the final result file I need to analyse.
 ![](http://i.imgur.com/39f0SCl.png)
 
 ###2. Traceroute
+dedewedw
 In the traceroute log file:
  
 * `traceroute` program will first analyse the ip address from the domain

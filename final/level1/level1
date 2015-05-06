@@ -1,0 +1,33 @@
+#CS615-Level1
+#The Matrix
+
+#Problem:
+This message must contain the secret passphrase.  This passphrase
+has been made available to you in a file conveniently readable by
+anybody on a system you have access to.
+
+To help you find that file, here is it's checksum:
+
+76e78deccf884b12e7b542712461fcd5b0fd8ddb14b28ccedf3629d9a635d7a1
+
+#Result
+The checksum is 256 bits long,so we think it is sha256.So we want to use sha256 to check all the file in the linux-lab.
+the command is :
+```
+find . -exec sha256sum {} \; 2>/dev/null | grep 76e78deccf884b12e7b542712461fcd5b0fd8ddb14b28ccedf3629d9a635d7a1
+```
+
+but it didn't work in the linux-lab root direction,a lot of direction we can't access.
+so we want to try it in the `~jschauma/cs_html/`,but we can't use `ls` command.
+First,we check the `~jschauma/cs_html/615` and find nothing.So I have tried some other direction name like "tmp".
+Finally,we found the `~jschauma/cs_html/tmp` and use the command to check the file sha256.
+
+the result is :
+```
+76e78deccf884b12e7b542712461fcd5b0fd8ddb14b28ccedf3629d9a635d7a1  ./org/postgresql/sess_d3vp903ivee5tnonbd99ljru77
+```
+
+In the file 
+```
+The passphrase is: "Octopuses have three hearts."
+```

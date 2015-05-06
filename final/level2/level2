@@ -1,0 +1,30 @@
+#Title : CS615-level2
+#The Matrix
+
+#result
+
+We open the url `https://www.cs.stevens.edu/~jschauma/cgi-bin/ctf.cgi` using browser and find nothing.
+so we enter `/home/jschauma/cs_html/cgi-bin` and `cat ctf.cgi`
+we found the script
+```
+$file = "/home/jschauma/cs_html/tmp/d/nope";
+```
+and
+
+```
+#system("cat /home/jschauma/tmp/level-3");
+system("cat $file");
+```
+
+so the file `/home/jschauma/tmp/level-3` is the answer,but we can't read the file `/home/jschauma/tmp/level-3`
+However the folder `/home/jschauma/cs_html/tmp/d/` permission is 777,so we can change the `nope`
+
+First,`mv` the nope to another name and than creat a link to the `/home/jschauma/tmp/level-3`
+command is :
+```
+ln -s  /home/jschauma/tmp/level-3 nope
+```
+
+Then open the `https://www.cs.stevens.edu/~jschauma/cgi-bin/ctf.cgi` again and the the answer is 
+
+"Goats, Sheep, Octopus And Toads Have Rectangular Pupils"

@@ -1,0 +1,18 @@
+#CS615-level4
+##The Matrix
+
+**result**
+
+When we saw the SSH key pair, we knew that we must login a server. It cannot be linux-lab, the only server we all know is `http://cs615-ctf.netmeister.org`. Try to login the server, but failed. So we downloaded a tool name `nmap` to scan all the port of this server. Finally, we found there are two listening port, 80 and 2233. The 2233 port must be the sshd port, it is similar with 22 and not a regular port. When we tried again using `root`, failed again. We relized that in the scoreboard, all of our team names are lowercase and has no space. Maybe, the user name is our team name. Tried again and finally we did it.
+
+``` shell
+ubuntu@ip-172-31-50-131:~$ ssh thematrix@54.159.132.83 -p2233 -i ./id_rsa 
+Congratulations!  You've cleared level 4!
+
+The passphrase for the final level is:
+
+"**An octopus can regrow arms it has lost.**"
+
+Connection to 54.159.132.83 closed.
+
+```

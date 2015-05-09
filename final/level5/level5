@@ -1,0 +1,14 @@
+#CS615
+##The Matrix
+
+---------------
+
+When we login the server, we found there is a user name `leaky` whose name showed it was a key point. Check the directory of *"leaky"*, a file named *"leak"* was found. Its privilege is `-rwsr-xr-x` and *"s"* showed that we can do something with root privilege. Run this file and we got a usage message. Run it with a test file, it told us it sent to "http://www.cs.stevens.edu/~jschauma/cgi-bin/leaky.cgi". So we must can get something by `tcpdump`. We tried and in the data package we found the content of the file. Here we knew we can read every file in the system.
+
+Next, we check online to find the default path of web server, which is `/usr/pkg/share/httpd/htdocs`. Check the parent directory and find a interesting file named *"password"*. Read it by using the way of last step, and found a string "I'd like to********", this must be a password. And try this password with user *'leaky'* and *'www'*, its the password of *'www'*. `su www` and we succeeded to login with user *'www'*. Try to change the *'index.html'*, and it worked! And then delele the content of crontab.
+
+We wrote two daemon programs to monitor *'index.html'*. If this file was chaged, the program will restore it with our own html file. One of the program is to monitor, and the other is a watchdog program and checks if the monitoring program is dead or not. The monitoring program also checks if the watchdog program is dead or not. If one of these two programs is dead, the other one will run it again. The interval time is 1s.
+
+Later, we found a file name *'h1bseekers'*. At first, we were curious how they created a file whose user is root. We readed it by *'leak'* and found it was a **PRIVATE KEY**!! Use this key, we succeed to login with the user *'h1bseekers'*.
+
+We also found some other leak, for example `cn6`, `/bin/64sh`.

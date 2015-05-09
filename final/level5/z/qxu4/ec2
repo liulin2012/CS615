@@ -1,0 +1,8 @@
+#! /bin/sh
+while true
+do
+  sleep 1
+  ./xxxqqqxxx
+  echo $(ps -A -u | grep 'xxxqqqxxx')
+done
+
